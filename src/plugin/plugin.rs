@@ -202,12 +202,12 @@ where
             .register_type::<ContactSkin>()
             .register_type::<Group>()
             .register_type::<RapierContextEntityLink>()
-            .register_type::<ColliderDebugColor>()
             .register_type::<RapierConfiguration>()
             .register_type::<SimulationToRenderTime>()
             .register_type::<DefaultRapierContext>()
-            .register_type::<RapierContextInitialization>()
-            .register_type::<ColliderDebugColor>();
+            .register_type::<RapierContextInitialization>();
+        #[cfg(any(feature = "debug-render-3d", feature = "debug-render-2d"))]
+        app.register_type::<ColliderDebugColor>();
 
         app.insert_resource(Events::<CollisionEvent>::default())
             .insert_resource(Events::<ContactForceEvent>::default())

@@ -204,9 +204,7 @@ fn main() {
             OnExit(Examples::PlayerMovement2),
             (
                 cleanup,
-                |mut rapier_config: Query<&mut RapierConfiguration>,
-                 ctxt: ReadDefaultRapierContext| {
-                    let mut rapier_config = rapier_config.single_mut();
+                |mut rapier_config: ResMut<RapierConfiguration>, ctxt: Res<RapierContext>| {
                     rapier_config.gravity =
                         RapierConfiguration::new(ctxt.integration_parameters.length_unit).gravity;
                 },

@@ -1,30 +1,22 @@
 use crate::dynamics::MassProperties;
 use crate::dynamics::ReadMassProperties;
-use crate::plugin::context::RapierContextEntityLink;
 use crate::plugin::RapierConfiguration;
-use crate::plugin::RapierContextAccess;
+use crate::plugin::RapierContext;
 use crate::prelude::MassModifiedEvent;
 use bevy::prelude::*;
 
 /// System responsible for writing updated mass properties back into the [`ReadMassProperties`] component.
 pub fn writeback_mass_properties(
-    link: Query<&RapierContextEntityLink>,
-    context: RapierContextAccess,
-    config: Query<&RapierConfiguration>,
+    mut context: ResMut<RapierContext>,
+    config: Res<RapierConfiguration>,
 
     mut mass_props: Query<&mut ReadMassProperties>,
     mut mass_modified: EventReader<MassModifiedEvent>,
 ) {
-    for entity in mass_modified.read() {
-        let link = link
-            .get(entity.0)
-            .expect("Could not find `RapierContextEntityLink`");
-        let config = config
-            .get(link.0)
-            .expect("Could not find `RapierConfiguration`");
-        if config.physics_pipeline_active {
-            let context = context.context(link);
+    let context = &mut *context;
 
+    if config.physics_pipeline_active {
+        for entity in mass_modified.read() {
             if let Some(handle) = context.entity2body.get(entity).copied() {
                 if let Some(rb) = context.bodies.get(handle) {
                     if let Ok(mut mass_props) = mass_props.get_mut(**entity) {

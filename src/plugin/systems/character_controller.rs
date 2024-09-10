@@ -1,9 +1,8 @@
 use crate::control::CharacterCollision;
 use crate::dynamics::RapierRigidBodyHandle;
 use crate::geometry::RapierColliderHandle;
-use crate::plugin::context::RapierContextEntityLink;
 use crate::plugin::RapierConfiguration;
-use crate::plugin::WriteRapierContext;
+use crate::plugin::RapierContext;
 use crate::prelude::KinematicCharacterController;
 use crate::prelude::KinematicCharacterControllerOutput;
 use crate::utils;
@@ -16,11 +15,10 @@ use rapier::pipeline::QueryFilter;
 /// collider.
 pub fn update_character_controls(
     mut commands: Commands,
-    config: Query<&RapierConfiguration>,
-    mut context_access: WriteRapierContext,
+    config: Res<RapierConfiguration>,
+    mut context: ResMut<RapierContext>,
     mut character_controllers: Query<(
         Entity,
-        &RapierContextEntityLink,
         &mut KinematicCharacterController,
         Option<&mut KinematicCharacterControllerOutput>,
         Option<&RapierColliderHandle>,
@@ -29,23 +27,13 @@ pub fn update_character_controls(
     )>,
     mut transforms: Query<&mut Transform>,
 ) {
-    for (
-        entity,
-        rapier_context_link,
-        mut controller,
-        output,
-        collider_handle,
-        body_handle,
-        glob_transform,
-    ) in character_controllers.iter_mut()
+    let context = &mut *context;
+    for (entity, mut controller, output, collider_handle, body_handle, glob_transform) in
+        character_controllers.iter_mut()
     {
         if let (Some(raw_controller), Some(translation)) =
             (controller.to_raw(), controller.translation)
         {
-            let config = config
-                .get(rapier_context_link.0)
-                .expect("Could not get [`RapierConfiguration`]");
-            let context = context_access.context(rapier_context_link).into_inner();
             let scaled_custom_shape =
                 controller
                     .custom_shape

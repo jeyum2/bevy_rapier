@@ -3,7 +3,6 @@
 mod character_controller;
 mod collider;
 mod joint;
-mod multiple_rapier_contexts;
 mod remove;
 mod rigid_body;
 mod writeback;
@@ -11,7 +10,6 @@ mod writeback;
 pub use character_controller::*;
 pub use collider::*;
 pub use joint::*;
-pub use multiple_rapier_contexts::*;
 pub use remove::*;
 pub use rigid_body::*;
 pub use writeback::*;
@@ -19,7 +17,7 @@ pub use writeback::*;
 use crate::dynamics::{RapierRigidBodyHandle, TransformInterpolation};
 use crate::pipeline::{CollisionEvent, ContactForceEvent};
 use crate::plugin::configuration::SimulationToRenderTime;
-use crate::plugin::{RapierConfiguration, RapierContext, TimestepMode};
+use crate::plugin::{RapierConfiguration, RapierContext};
 use crate::prelude::{BevyPhysicsHooks, BevyPhysicsHooksAdapter};
 use bevy::ecs::system::{StaticSystemParam, SystemParamItem};
 use bevy::prelude::*;
@@ -27,44 +25,37 @@ use bevy::prelude::*;
 /// System responsible for advancing the physics simulation, and updating the internal state
 /// for scene queries.
 pub fn step_simulation<Hooks>(
-    mut context: Query<(
-        &mut RapierContext,
-        &RapierConfiguration,
-        &mut SimulationToRenderTime,
-    )>,
-    timestep_mode: Res<TimestepMode>,
+    mut context: ResMut<RapierContext>,
+    config: Res<RapierConfiguration>,
     hooks: StaticSystemParam<Hooks>,
     time: Res<Time>,
-    mut collision_events: EventWriter<CollisionEvent>,
-    mut contact_force_events: EventWriter<ContactForceEvent>,
-    mut interpolation_query: Query<(&RapierRigidBodyHandle, &mut TransformInterpolation)>,
+    mut sim_to_render_time: ResMut<SimulationToRenderTime>,
+    collision_events: EventWriter<CollisionEvent>,
+    contact_force_events: EventWriter<ContactForceEvent>,
+    interpolation_query: Query<(&RapierRigidBodyHandle, &mut TransformInterpolation)>,
 ) where
     Hooks: 'static + BevyPhysicsHooks,
     for<'w, 's> SystemParamItem<'w, 's, Hooks>: BevyPhysicsHooks,
 {
+    let context = &mut *context;
     let hooks_adapter = BevyPhysicsHooksAdapter::new(hooks.into_inner());
 
-    for (mut context, config, mut sim_to_render_time) in context.iter_mut() {
-        let context = &mut *context;
+    if config.physics_pipeline_active {
+        context.step_simulation(
+            config.gravity,
+            config.timestep_mode,
+            Some((collision_events, contact_force_events)),
+            &hooks_adapter,
+            &time,
+            &mut sim_to_render_time,
+            Some(interpolation_query),
+        );
+    } else {
+        context.propagate_modified_body_positions_to_colliders();
+    }
 
-        if config.physics_pipeline_active {
-            context.step_simulation(
-                config.gravity,
-                *timestep_mode,
-                Some((&collision_events, &contact_force_events)),
-                &hooks_adapter,
-                &time,
-                &mut sim_to_render_time,
-                Some(&mut interpolation_query),
-            );
-        } else {
-            context.propagate_modified_body_positions_to_colliders();
-        }
-
-        if config.query_pipeline_active {
-            context.update_query_pipeline();
-        }
-        context.send_bevy_events(&mut collision_events, &mut contact_force_events);
+    if config.query_pipeline_active {
+        context.update_query_pipeline();
     }
 }
 
@@ -220,9 +211,8 @@ pub mod tests {
 
             app.update();
 
-            let world = app.world_mut();
-            let context = world.query::<&RapierContext>().iter(&world).next().unwrap();
-            let child_transform = world.entity(child).get::<GlobalTransform>().unwrap();
+            let child_transform = app.world().entity(child).get::<GlobalTransform>().unwrap();
+            let context = app.world().resource::<RapierContext>();
             let child_handle = context.entity2body[&child];
             let child_body = context.bodies.get(child_handle).unwrap();
             let body_transform = utils::iso_to_transform(child_body.position());
@@ -284,8 +274,7 @@ pub mod tests {
                 .get::<GlobalTransform>()
                 .unwrap()
                 .compute_transform();
-            let world = app.world_mut();
-            let context = world.query::<&RapierContext>().iter(&world).next().unwrap();
+            let context = app.world().resource::<RapierContext>();
             let parent_handle = context.entity2body[&parent];
             let parent_body = context.bodies.get(parent_handle).unwrap();
             let child_collider_handle = parent_body.colliders()[0];
